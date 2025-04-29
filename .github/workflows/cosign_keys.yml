@@ -30,7 +30,8 @@ jobs:
       # Generate Cosign key pair without password
       - name: Generate Cosign keys
         run: |
-          cosign generate-key-pair --no-password
+          # Убедимся, что пароль не запрашивается
+          COSIGN_PASSWORD="" cosign generate-key-pair
           chmod 600 cosign.key cosign.pub
 
       # Commit and push the generated keys back to the repository
