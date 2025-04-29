@@ -38,8 +38,8 @@ jobs:
           echo "temp_password" | cosign generate-key-pair
           chmod 600 cosign.key cosign.pub
 
-          # Преобразование ключа из PKCS#8 в PKCS#1 и удаление пароля
-          openssl pkcs8 -in cosign.key -out cosign_unprotected.key -nocrypt -passin pass:temp_password
+          # Удаление пароля из приватного ключа с помощью OpenSSL
+          openssl pkey -in cosign.key -out cosign_unprotected.key -passin pass:temp_password
           mv cosign_unprotected.key cosign.key
           chmod 600 cosign.key
 
