@@ -6,85 +6,54 @@ on:
   pull_request:
     branches: [ "main" ]
   workflow_dispatch:
-    # Позволяет запускать workflow вручную через интерфейс GitHub Actions
 
 jobs:
   test-kyverno-policy:
-
     runs-on: ubuntu-latest
     permissions:
       contents: read
 
     steps:
-      # Checkout repository
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # Install Kind
       - name: Install Kind
         run: |
           curl -Lo ./kind https://kind.sigs.k8s.io/dl/v0.20.0/kind-linux-amd64
           chmod +x ./kind
           sudo mv ./kind /usr/local/bin/kind
 
-      # Create Kind cluster
       - name: Create Kind cluster
         run: |
           kind create cluster --name kyverno-test
           kubectl cluster-info --context kind-kyverno-test
 
-      # Install Helm
       - name: Install Helm
         run: |
           curl https://raw.githubusercontent.com/helm/helm/master/scripts/get-helm-3 | bash
 
-      # Add Kyverno Helm repository and install Kyverno
       - name: Install Kyverno using Helm
         run: |
           helm repo add kyverno https://kyverno.github.io/kyverno/
           helm repo update
-          helm install kyverno kyverno/kyverno --namespace kyverno --create-namespace
+          helm install kyverno kyverno/kyverno -n kyverno --create-namespace --set replicaCount=1
 
-      # Wait for Kyverno pods to be ready
       - name: Wait for Kyverno pods to be ready
         run: |
-          # Install jq for JSON processing
-          sudo apt-get install -y jq
+          kubectl wait --namespace kyverno \
+            --for=condition=available \
+            --timeout=300s \
+            deployment/kyverno
 
-          # Wait until Kyverno pods are created
-          echo "Waiting for Kyverno pods to be created..."
-          timeout=300
-          interval=10
-          elapsed=0
-          while [ $elapsed -lt $timeout ]; do
-            POD_COUNT=$(kubectl get pods -n kyverno --no-headers 2>/dev/null | wc -l)
-            if [ "$POD_COUNT" -gt 0 ]; then
-              echo "Kyverno pods found!"
-              break
-            fi
-            echo "No Kyverno pods found yet. Retrying in $interval seconds..."
-            sleep $interval
-            elapsed=$((elapsed + interval))
-          done
+          kubectl wait --namespace kyverno \
+            --for=condition=ready \
+            --timeout=300s \
+            pod -l app.kubernetes.io/name=kyverno
 
-          if [ "$POD_COUNT" -eq 0 ]; then
-            echo "Error: No Kyverno pods were created after $timeout seconds."
-            exit 1
-          fi
-
-          # Get the correct label selector for Kyverno pods
-          LABEL_SELECTOR=$(kubectl get pods -n kyverno -o jsonpath="{.items[0].metadata.labels}" | jq -r 'to_entries | map("\(.key)=\(.value)") | join(",")')
-          echo "Using label selector: $LABEL_SELECTOR"
-          
-          # Wait for Kyverno pods to be ready
-          kubectl wait --for=condition=ready pod -l "$LABEL_SELECTOR" -n kyverno --timeout=300s
-
-      # Create Secret for Cosign public key
       - name: Create Secret for Cosign public key
         run: |
           kubectl create secret generic cosign-public-key --from-file=cosign.pub=./cosign.pub
 
-      # Apply Kyverno policy
       - name: Apply Kyverno policy
         run: |
           cat <<EOF | kubectl apply -f -
@@ -107,7 +76,7 @@ jobs:
                   - key: "{{ request.object.spec.containers[].image }}"
                     operator: AnyIn
                     value:
-                      - ghcr.io/it-life1/** # Проверяем только образы из этого репозитория
+                      - ghcr.io/it-life1/**
                 validate:
                   message: "Image is not signed or signature verification failed."
                   foreach:
@@ -116,7 +85,7 @@ jobs:
                       - name: imageData
                         imageRegistry:
                           reference: "{{ element.image }}"
-                          secret: cosign-public-key
+                          key: cosign-public-key # Corrected field name
                     deny:
                       conditions:
                         all:
@@ -125,7 +94,6 @@ jobs:
                           value: false
           EOF
 
-      # Deploy signed image (should succeed)
       - name: Deploy signed image
         run: |
           cat <<EOF | kubectl apply -f -
@@ -149,9 +117,9 @@ jobs:
           EOF
           kubectl wait --for=condition=available deployment/signed-deployment --timeout=300s
 
-      # Deploy unsigned image (should fail)
       - name: Deploy unsigned image
         run: |
+          set +e
           cat <<EOF | kubectl apply -f -
           apiVersion: apps/v1
           kind: Deployment
@@ -171,10 +139,10 @@ jobs:
                 - name: unsigned-container
                   image: ghcr.io/it-life1/dockertesting:unsigned-tag
           EOF
-          sleep 10 # Wait for Kyverno to block the deployment
-          kubectl get pods -l app=unsigned || echo "Unsigned deployment blocked as expected"
+          sleep 10
+          kubectl get deployment unsigned-deployment && exit 1
+          echo "Unsigned deployment blocked as expected"
 
-      # Cleanup Kind cluster
       - name: Cleanup Kind cluster
         if: always()
         run: |
