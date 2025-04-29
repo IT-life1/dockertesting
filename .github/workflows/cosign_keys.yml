@@ -27,10 +27,10 @@ jobs:
         with:
           cosign-release: 'v2.2.4'
 
-      # Generate Cosign key pair
+      # Generate Cosign key pair without password
       - name: Generate Cosign keys
         run: |
-          cosign generate-key-pair
+          cosign generate-key-pair --no-password
           chmod 600 cosign.key cosign.pub
 
       # Commit and push the generated keys back to the repository
