@@ -1,0 +1,43 @@
+name: Generate Cosign Keys
+
+# This workflow uses actions that are not certified by GitHub.
+# They are provided by a third-party and are governed by
+# separate terms of service, privacy policy, and support
+# documentation.
+
+on:
+  workflow_dispatch:
+    # Позволяет запускать workflow вручную через интерфейс GitHub Actions
+
+jobs:
+  generate-keys:
+
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # Разрешение на запись изменений в репозиторий
+
+    steps:
+      # Checkout repository
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # Install the cosign tool
+      - name: Install cosign
+        uses: sigstore/cosign-installer@59acb6260d9c0ba8f4a2f9d9b48431a222b68e20 #v3.5.0
+        with:
+          cosign-release: 'v2.2.4'
+
+      # Generate Cosign key pair
+      - name: Generate Cosign keys
+        run: |
+          cosign generate-key-pair
+          chmod 600 cosign.key cosign.pub
+
+      # Commit and push the generated keys back to the repository
+      - name: Commit Cosign keys to repository
+        run: |
+          git config --global user.name "GitHub Actions"
+          git config --global user.email "actions@github.com"
+          git add cosign.key cosign.pub
+          git commit -m "Add Cosign keys (private and public)"
+          git push origin main
