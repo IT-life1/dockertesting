@@ -1,49 +1,37 @@
-name: Generate Cosign Keys
-
-# This workflow uses actions that are not certified by GitHub.
-# They are provided by a third-party and are governed by
-# separate terms of service, privacy policy, and support
-# documentation.
+name: Generate and Commit Cosign Keys
 
 on:
   workflow_dispatch:
-    # Позволяет запускать workflow вручную через интерфейс GitHub Actions
 
 jobs:
   generate-keys:
-
     runs-on: ubuntu-latest
     permissions:
-      contents: write # Разрешение на запись изменений в репозиторий
+      contents: write
 
     steps:
-      # Checkout repository
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # Install the cosign tool
       - name: Install cosign
-        uses: sigstore/cosign-installer@59acb6260d9c0ba8f4a2f9d9b48431a222b68e20 #v3.5.0
+        uses: sigstore/cosign-installer@v3.5.0
         with:
           cosign-release: 'v2.2.4'
 
-      # Install OpenSSL
       - name: Install OpenSSL
         run: sudo apt-get update && sudo apt-get install -y openssl
 
-      # Generate Cosign key pair without password
       - name: Generate Cosign keys
         run: |
-          # Генерация ключей с временным паролем
-          echo "temp_password" | cosign generate-key-pair
+          # Use printf to avoid trailing newline in the password
+          printf "temp_password" | cosign generate-key-pair -y
           chmod 600 cosign.key cosign.pub
 
-          # Удаление пароля из приватного ключа с помощью OpenSSL
+          # Decrypt the private key
           openssl pkey -in cosign.key -out cosign_unprotected.key -passin pass:temp_password
           mv cosign_unprotected.key cosign.key
           chmod 600 cosign.key
 
-      # Commit and push the generated keys back to the repository
       - name: Commit Cosign keys to repository
         run: |
           git config --global user.name "GitHub Actions"
