@@ -31,7 +31,7 @@ jobs:
       - name: Generate Cosign keys
         run: |
           # Убедимся, что пароль не запрашивается
-          COSIGN_PASSWORD="" cosign generate-key-pair
+          COSIGN_PASSWORD="sova" cosign generate-key-pair
           chmod 600 cosign.key cosign.pub
 
       # Commit and push the generated keys back to the repository
