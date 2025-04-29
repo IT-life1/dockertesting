@@ -1,0 +1,46 @@
+name: Check Cosign Key Password
+
+# This workflow runs only manually
+on:
+  workflow_dispatch:
+
+jobs:
+  check-key:
+    runs-on: ubuntu-latest
+
+    steps:
+      # Checkout repository (optional, if needed)
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # Install OpenSSL
+      - name: Install OpenSSL
+        run: sudo apt-get update && sudo apt-get install -y openssl
+
+      # Write the private key to a temporary file
+      - name: Write private key to file
+        run: |
+          echo "${{ secrets.COSIGN_PRIVATE_KEY }}" > /tmp/cosign.key
+          chmod 600 /tmp/cosign.key
+
+      # Check if the key is password-protected
+      - name: Check if key is password-protected
+        id: check-password
+        run: |
+          # Try to read the key without a password
+          if openssl rsa -in /tmp/cosign.key -out /dev/null 2>/dev/null; then
+            echo "Key is NOT password-protected."
+            echo "IS_PASSWORD_PROTECTED=false" >> $GITHUB_ENV
+          else
+            echo "Key IS password-protected."
+            echo "IS_PASSWORD_PROTECTED=true" >> $GITHUB_ENV
+          fi
+
+      # Output the result
+      - name: Print result
+        run: |
+          if [ "${{ env.IS_PASSWORD_PROTECTED }}" = "true" ]; then
+            echo "The private key is password-protected."
+          else
+            echo "The private key is NOT password-protected."
+          fi
