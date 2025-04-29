@@ -84,5 +84,7 @@ jobs:
           # Write the private key to a temporary file
           echo "${{ secrets.COSIGN_PRIVATE_KEY }}" > /tmp/cosign.key
           chmod 600 /tmp/cosign.key
-          # Sign the image using the private key with a password
+          # Automatically agree to upload to Transparency Log
+          export COSIGN_YES=true
+          # Sign the image using the private key
           echo "${TAGS}" | xargs -I {} cosign sign --key /tmp/cosign.key {}@${DIGEST}
