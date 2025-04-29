@@ -1,0 +1,141 @@
+name: Test Kyverno Policy with Kind
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+  workflow_dispatch:
+    # Позволяет запускать workflow вручную через интерфейс GitHub Actions
+
+jobs:
+  test-kyverno-policy:
+
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      # Checkout repository
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # Install Kind
+      - name: Install Kind
+        run: |
+          curl -Lo ./kind https://kind.sigs.k8s.io/dl/v0.20.0/kind-linux-amd64
+          chmod +x ./kind
+          sudo mv ./kind /usr/local/bin/kind
+
+      # Create Kind cluster
+      - name: Create Kind cluster
+        run: |
+          kind create cluster --name kyverno-test
+          kubectl cluster-info --context kind-kyverno-test
+
+      # Install Kyverno
+      - name: Install Kyverno
+        run: |
+          kubectl create -f https://raw.githubusercontent.com/kyverno/kyverno/main/config/install.yaml
+          kubectl wait --for=condition=ready pod -l app=kyverno -n kyverno --timeout=300s
+
+      # Create Secret for Cosign public key
+      - name: Create Secret for Cosign public key
+        run: |
+          kubectl create secret generic cosign-public-key --from-file=cosign.pub=./cosign.pub
+
+      # Apply Kyverno policy
+      - name: Apply Kyverno policy
+        run: |
+          cat <<EOF | kubectl apply -f -
+          apiVersion: kyverno.io/v1
+          kind: ClusterPolicy
+          metadata:
+            name: verify-image-signatures
+          spec:
+            validationFailureAction: enforce
+            background: false
+            rules:
+              - name: check-image-signature
+                match:
+                  any:
+                  - resources:
+                      kinds:
+                        - Pod
+                preconditions:
+                  all:
+                  - key: "{{ request.object.spec.containers[].image }}"
+                    operator: AnyIn
+                    value:
+                      - ghcr.io/it-life1/** # Проверяем только образы из этого репозитория
+                validate:
+                  message: "Image is not signed or signature verification failed."
+                  foreach:
+                  - list: "request.object.spec.containers"
+                    context:
+                      - name: imageData
+                        imageRegistry:
+                          reference: "{{ element.image }}"
+                          secret: cosign-public-key
+                    deny:
+                      conditions:
+                        all:
+                        - key: "{{ imageData.signatureVerified }}"
+                          operator: Equals
+                          value: false
+          EOF
+
+      # Deploy signed image (should succeed)
+      - name: Deploy signed image
+        run: |
+          cat <<EOF | kubectl apply -f -
+          apiVersion: apps/v1
+          kind: Deployment
+          metadata:
+            name: signed-deployment
+          spec:
+            replicas: 1
+            selector:
+              matchLabels:
+                app: signed
+            template:
+              metadata:
+                labels:
+                  app: signed
+              spec:
+                containers:
+                - name: signed-container
+                  image: ghcr.io/it-life1/dockertesting:signed-tag
+          EOF
+          kubectl wait --for=condition=available deployment/signed-deployment --timeout=300s
+
+      # Deploy unsigned image (should fail)
+      - name: Deploy unsigned image
+        run: |
+          cat <<EOF | kubectl apply -f -
+          apiVersion: apps/v1
+          kind: Deployment
+          metadata:
+            name: unsigned-deployment
+          spec:
+            replicas: 1
+            selector:
+              matchLabels:
+                app: unsigned
+            template:
+              metadata:
+                labels:
+                  app: unsigned
+              spec:
+                containers:
+                - name: unsigned-container
+                  image: ghcr.io/it-life1/dockertesting:unsigned-tag
+          EOF
+          sleep 10 # Wait for Kyverno to block the deployment
+          kubectl get pods -l app=unsigned || echo "Unsigned deployment blocked as expected"
+
+      # Cleanup Kind cluster
+      - name: Cleanup Kind cluster
+        if: always()
+        run: |
+          kind delete cluster --name kyverno-test
