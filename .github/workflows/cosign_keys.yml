@@ -30,9 +30,14 @@ jobs:
       # Generate Cosign key pair without password
       - name: Generate Cosign keys
         run: |
-          # Убедимся, что пароль не запрашивается
-          COSIGN_PASSWORD="" cosign generate-key-pair
+          # Генерация ключей с временным паролем
+          echo "temp_password" | cosign generate-key-pair
           chmod 600 cosign.key cosign.pub
+
+          # Удаление пароля из приватного ключа с помощью OpenSSL
+          openssl rsa -in cosign.key -out cosign_unprotected.key -passin pass:temp_password
+          mv cosign_unprotected.key cosign.key
+          chmod 600 cosign.key
 
       # Commit and push the generated keys back to the repository
       - name: Commit Cosign keys to repository
