@@ -44,7 +44,7 @@ jobs:
       - name: Verify Docker image signature
         run: |
           # Define the full image reference
-          IMAGE_REF="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}"
+          IMAGE_REF="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}"
           
           # Run cosign verify with the public key
           cosign verify --key cosign.pub $IMAGE_REF
