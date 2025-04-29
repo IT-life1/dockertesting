@@ -79,9 +79,10 @@ jobs:
         env:
           TAGS: ${{ steps.meta.outputs.tags }}
           DIGEST: ${{ steps.build-and-push.outputs.digest }}
+          COSIGN_PASSWORD: ${{ secrets.COSIGN_PASSWORD }} # Пароль для приватного ключа
         run: |
           # Write the private key to a temporary file
           echo "${{ secrets.COSIGN_PRIVATE_KEY }}" > /tmp/cosign.key
           chmod 600 /tmp/cosign.key
-          # Sign the image using the private key without a password
+          # Sign the image using the private key with a password
           echo "${TAGS}" | xargs -I {} cosign sign --key /tmp/cosign.key {}@${DIGEST}
