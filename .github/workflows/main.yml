@@ -58,20 +58,14 @@ jobs:
           helm repo update
           helm install kyverno kyverno/kyverno -n kyverno --create-namespace \
             --set replicaCount=1 \
-            --set image.tag=v1.10.0 \
+            --set image.tag=v1.10.0 \ # Установите последнюю версию Kyverno
             --set extraArgs="{--debug,--logLevel=4}" \
             --wait --timeout 5m
 
           kubectl get pods -n kyverno -o wide
           kubectl logs -n kyverno -l app.kubernetes.io/name=kyverno --tail=50
 
-      # Configure Cosign secret
-      - name: Configure Cosign secret
-        run: |
-          kubectl create secret generic cosign-public-key \
-            --from-file=cosign.pub=./cosign.pub
-
-      # Apply verification policy using Secret
+      # Apply verification policy with inline public key
       - name: Apply verification policy
         run: |
           cat <<EOF | kubectl apply -f -
@@ -90,7 +84,11 @@ jobs:
                     kinds: [Pod]
               verifyImages:
               - image: "ghcr.io/it-life1/*"
-                keySecret: cosign-public-key # Используем Secret с публичным ключом
+                key: |
+                  -----BEGIN PUBLIC KEY-----
+                  MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAExPrhWufkKkQjMyMW6vUaHw97id+m
+                  UoIIbDtp0h3LnoBSF7XSSfvAy9Vcg/BZbJvgHRsf9ymU7iT9ucztqnF3oQ==
+                  -----END PUBLIC KEY-----
           EOF
 
       # Test signed image
