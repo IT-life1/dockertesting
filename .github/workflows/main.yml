@@ -71,13 +71,9 @@ jobs:
           kubectl create secret generic cosign-public-key \
             --from-file=cosign.pub=./cosign.pub
 
-      # Apply verification policy
+      # Apply verification policy using Secret
       - name: Apply verification policy
         run: |
-          # Read the public key content into a variable
-          PUBLIC_KEY=$(cat cosign.pub)
-
-          # Apply the Kyverno policy with the public key embedded correctly
           cat <<EOF | kubectl apply -f -
           apiVersion: kyverno.io/v1
           kind: ClusterPolicy
@@ -94,8 +90,7 @@ jobs:
                     kinds: [Pod]
               verifyImages:
               - image: "ghcr.io/it-life1/*"
-                key: |
-                  ${PUBLIC_KEY}
+                keySecret: cosign-public-key # Используем Secret с публичным ключом
           EOF
 
       # Test signed image
