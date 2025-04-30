@@ -126,7 +126,10 @@ jobs:
             kubectl logs -n kyverno -l app.kubernetes.io/name=kyverno --tail=50
             exit 1
           fi
-      
+          
+          kubectl logs signed-test
+          kubectl describe pod signed-test
+          kubectl wait pod/signed-test --for=condition=Ready --timeout=60s
 
       # Test unsigned image
       - name: Test unsigned image
