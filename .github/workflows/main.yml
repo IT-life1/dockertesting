@@ -14,15 +14,18 @@ jobs:
       contents: read
 
     steps:
+      # Checkout repository
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      # Install Kind
       - name: Install Kind
         run: |
           curl -Lo ./kind https://kind.sigs.k8s.io/dl/v0.20.0/kind-linux-amd64
           chmod +x ./kind
           sudo mv ./kind /usr/local/bin/kind
 
+      # Create optimized Kind cluster
       - name: Create optimized Kind cluster
         run: |
           cat <<EOF | kind create cluster --name kyverno-test --config=-
@@ -43,10 +46,12 @@ jobs:
           EOF
           kubectl cluster-info --context kind-kyverno-test
 
+      # Install Helm
       - name: Install Helm
         run: |
           curl https://raw.githubusercontent.com/helm/helm/master/scripts/get-helm-3 | bash
 
+      # Install Kyverno with diagnostics
       - name: Install Kyverno with diagnostics
         run: |
           helm repo add kyverno https://kyverno.github.io/kyverno/
@@ -60,13 +65,19 @@ jobs:
           kubectl get pods -n kyverno -o wide
           kubectl logs -n kyverno -l app.kubernetes.io/name=kyverno --tail=50
 
+      # Configure Cosign secret
       - name: Configure Cosign secret
         run: |
           kubectl create secret generic cosign-public-key \
             --from-file=cosign.pub=./cosign.pub
 
+      # Apply verification policy
       - name: Apply verification policy
         run: |
+          # Read the public key content into a variable
+          PUBLIC_KEY=$(cat cosign.pub)
+
+          # Apply the Kyverno policy with the public key embedded correctly
           cat <<EOF | kubectl apply -f -
           apiVersion: kyverno.io/v1
           kind: ClusterPolicy
@@ -83,10 +94,11 @@ jobs:
                     kinds: [Pod]
               verifyImages:
               - image: "ghcr.io/it-life1/*"
-                key: |-
-                  $(cat cosign.pub)
+                key: |
+                  ${PUBLIC_KEY}
           EOF
 
+      # Test signed image
       - name: Test signed image
         run: |
           kubectl run signed-test \
@@ -96,6 +108,7 @@ jobs:
           
           kubectl wait pod/signed-test --for=condition=Ready --timeout=60s
 
+      # Test unsigned image
       - name: Test unsigned image
         run: |
           set +e
@@ -111,6 +124,7 @@ jobs:
             exit 1
           fi
 
+      # Cleanup cluster
       - name: Cleanup cluster
         if: always()
         run: |
