@@ -91,7 +91,6 @@ jobs:
                   -----END PUBLIC KEY-----
           EOF
 
-      # Test signed image
       - name: Test signed image
         run: |
           # Create the signed-test Pod
@@ -99,8 +98,8 @@ jobs:
             --image=ghcr.io/it-life1/dockertesting:latest \
             --restart=Never \
             --dry-run=server -o yaml | kubectl apply -f -
-
-          # Wait for the Pod to become Running
+      
+          # Wait for the Pod to become Ready
           timeout=60
           interval=5
           elapsed=0
@@ -114,18 +113,20 @@ jobs:
             sleep $interval
             elapsed=$((elapsed + interval))
           done
-
+      
           if [ "$POD_STATUS" != "Running" ]; then
-            echo "Error: Pod did not become Ready within $timeout seconds."
+            echo "Error: Pod did not become Running within $timeout seconds."
             echo "Pod description:"
             kubectl describe pod signed-test
+            echo "Pod logs:"
+            kubectl logs signed-test || echo "No logs available."
             echo "Cluster events:"
             kubectl get events --sort-by=.metadata.creationTimestamp
             echo "Kyverno logs:"
             kubectl logs -n kyverno -l app.kubernetes.io/name=kyverno --tail=50
             exit 1
           fi
-
+      
           # Confirm Pod is Ready
           kubectl wait pod/signed-test --for=condition=Ready --timeout=60s
 
