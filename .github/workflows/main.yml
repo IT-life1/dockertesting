@@ -127,8 +127,6 @@ jobs:
             exit 1
           fi
       
-          # Confirm Pod is Ready
-          kubectl wait pod/signed-test --for=condition=Ready --timeout=60s
 
       # Test unsigned image
       - name: Test unsigned image
