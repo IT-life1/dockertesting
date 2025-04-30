@@ -95,7 +95,7 @@ jobs:
         run: |
           # Create the signed-test Pod
           kubectl run signed-test \
-            --image=ghcr.io/it-life1/dockertesting:latest \
+            --image=ghcr.io/it-life1/dockertesting:main \
             --restart=Never \
             --dry-run=server -o yaml | kubectl apply -f -
       
