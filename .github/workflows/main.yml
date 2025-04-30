@@ -106,7 +106,7 @@ jobs:
         run: |
           set +e
           kubectl run unsigned-test \
-            --image=ghcr.io/it-life1/dockertesting:unsigned-tag \
+            --image=ghcr.io/it-life1/dockertesting:latest \
             --restart=Never \
             --dry-run=server -o yaml | kubectl apply -f - 2>/tmp/error.log
           
